@@ -135,9 +135,9 @@ class _LoginScreenState extends State<LoginScreen> {
       
       print('Final cookie string length: ${cookieString.length}');
       if (cookieString.length > 200) {
-        print('Cookie preview: ${cookieString.substring(0, 200)}...');
+        print('Cookie preview logging disabled');
       } else {
-        print('Cookies: $cookieString');
+        print('Cookie value logging disabled');
       }
       
       // Check apakah ada cookie penting seperti sessionid atau sid_tt
