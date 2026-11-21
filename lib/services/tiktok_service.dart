@@ -292,12 +292,101 @@ class TikTokService {
       final errorData = createData['data'] ?? {};
       final apiStatusCode = createData['status_code'];
       final apiStatusMessage = createData['status_msg'];
-      final hasPrompts = createData['data'] != null && createData['data']['prompts'] != null;
-      final diagnosticRoomId = createData['data']?['room_id'];
-      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room api_status_code=${apiStatusCode ?? 'missing'} '
-          'status_msg=${apiStatusMessage ?? 'missing'} prompts_present=$hasPrompts '
-          'room_id_present=${diagnosticRoomId != null && diagnosticRoomId.toString().isNotEmpty} '
-          'room_id=${diagnosticRoomId ?? 'missing'}');
+      final responseData = createData is Map ? createData['data'] : null;
+
+      String diagnosticValueType(dynamic value) {
+        if (value == null) return 'null';
+        if (value is String) return 'string';
+        if (value is bool) return 'bool';
+        if (value is int || value is num) return 'int';
+        if (value is Map) return 'object';
+        if (value is List) return 'array';
+        return value.runtimeType.toString();
+      }
+
+      void collectDiagnosticPaths(dynamic value, String path, int depth, List<String> output) {
+        if (depth >= 3) return;
+        if (value is Map) {
+          for (final entry in value.entries) {
+            final key = entry.key.toString();
+            final childPath = path.isEmpty ? key : '$path.$key';
+            output.add('$childPath:${diagnosticValueType(entry.value)}');
+            collectDiagnosticPaths(entry.value, childPath, depth + 1, output);
+          }
+        } else if (value is List) {
+          for (var i = 0; i < value.length; i++) {
+            final childPath = '$path[$i]';
+            output.add('$childPath:${diagnosticValueType(value[i])}');
+            collectDiagnosticPaths(value[i], childPath, depth + 1, output);
+          }
+        }
+      }
+
+      bool diagnosticFieldExists(dynamic value, String field) {
+        if (value is Map) {
+          if (value.containsKey(field)) return true;
+          for (final child in value.values) {
+            if (diagnosticFieldExists(child, field)) return true;
+          }
+        } else if (value is List) {
+          for (final child in value) {
+            if (diagnosticFieldExists(child, field)) return true;
+          }
+        }
+        return false;
+      }
+
+      dynamic findDiagnosticField(dynamic value, String field) {
+        if (value is Map) {
+          if (value.containsKey(field)) return value[field];
+          for (final child in value.values) {
+            final found = findDiagnosticField(child, field);
+            if (found != null) return found;
+          }
+        } else if (value is List) {
+          for (final child in value) {
+            final found = findDiagnosticField(child, field);
+            if (found != null) return found;
+          }
+        }
+        return null;
+      }
+
+      final diagnosticPaths = <String>[];
+      collectDiagnosticPaths(responseData, 'data', 0, diagnosticPaths);
+      const diagnosticFields = [
+        'room_id',
+        'room_id_str',
+        'stream_id',
+        'stream_id_str',
+        'living_room_attrs',
+        'rtmp_push_url',
+        'share_url',
+      ];
+      final diagnosticPresence = diagnosticFields
+          .map((field) => '$field=${diagnosticFieldExists(responseData, field)}')
+          .join(' ');
+      final diagnosticPrompts = findDiagnosticField(responseData, 'prompts');
+      final diagnosticPromptsText = diagnosticPrompts == null
+          ? 'missing'
+          : diagnosticPrompts.toString().replaceAll('\n', ' ').substring(
+              0,
+              diagnosticPrompts.toString().replaceAll('\n', ' ').length > 200
+                  ? 200
+                  : diagnosticPrompts.toString().replaceAll('\n', ' ').length,
+            );
+      final diagnosticStatusMessage = apiStatusMessage == null
+          ? 'missing'
+          : apiStatusMessage.toString().replaceAll('\n', ' ').substring(
+              0,
+              apiStatusMessage.toString().replaceAll('\n', ' ').length > 200
+                  ? 200
+                  : apiStatusMessage.toString().replaceAll('\n', ' ').length,
+            );
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room response_keys '
+          'paths=[${diagnosticPaths.join(', ')}] field_presence=[$diagnosticPresence] '
+          'prompts=$diagnosticPromptsText status_msg=$diagnosticStatusMessage');
+      final hasPrompts = diagnosticPrompts != null;
       
       // Check for error in response
       if (createData['data'] != null && createData['data']['prompts'] != null) {
