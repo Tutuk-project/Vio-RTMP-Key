@@ -365,6 +365,13 @@ class TikTokService {
         'data.status': ['status'],
         'data.finish_reason': ['finish_reason'],
         'data.live_room_mode': ['live_room_mode'],
+        'data.live_type_normal': ['live_type_normal'],
+        'data.live_type_third_party': ['live_type_third_party'],
+        'data.live_type_sandbox': ['live_type_sandbox'],
+        'data.live_type_screenshot': ['live_type_screenshot'],
+        'data.live_type_audio': ['live_type_audio'],
+        'data.live_type_linkmic': ['live_type_linkmic'],
+        'data.live_type_social_live': ['live_type_social_live'],
         'data.prompts': ['prompts'],
       };
       final diagnosticPresence = diagnosticFieldPaths.entries
@@ -382,8 +389,18 @@ class TikTokService {
         return '$field=non_numeric(${diagnosticValueType(value)})';
       }
 
-      final diagnosticScalars = ['status', 'finish_reason', 'live_room_mode']
-          .map(diagnosticScalarValue)
+      final diagnosticScalars = [
+        'status',
+        'finish_reason',
+        'live_room_mode',
+        'live_type_normal',
+        'live_type_third_party',
+        'live_type_sandbox',
+        'live_type_screenshot',
+        'live_type_audio',
+        'live_type_linkmic',
+        'live_type_social_live',
+      ].map(diagnosticScalarValue)
           .join(' ');
       addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room scalar_values=[$diagnosticScalars]');
 
