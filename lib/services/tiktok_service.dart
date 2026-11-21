@@ -362,7 +362,7 @@ class TikTokService {
         addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream cookie_missing=true');
         return false;
       }
-      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream cookie_health ${_cookieHealth(cookies)}');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream room_id=$roomId cookie_health ${_cookieHealth(cookies)}');
       final baseUrl = await getServerUrl();
       addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream server_url=$baseUrl source=${_lastServerSource ?? 'unknown'}');
       final version = await getLiveStudioVersion();
