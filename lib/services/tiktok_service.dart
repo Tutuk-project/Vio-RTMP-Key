@@ -395,15 +395,15 @@ class TikTokService {
       final diagnosticPrompts = findDiagnosticField(responseData, 'prompts');
       final diagnosticPromptsText = diagnosticPrompts == null
           ? 'missing'
-          : diagnosticPrompts.toString().replaceAll('\\n', ' ').substring(
+          : diagnosticPrompts.toString().replaceAll('\n', ' ').substring(
               0,
-              diagnosticPrompts.toString().replaceAll('\\n', ' ').length > 200
+              diagnosticPrompts.toString().replaceAll('\n', ' ').length > 200
                   ? 200
-                  : diagnosticPrompts.toString().replaceAll('\\n', ' ').length,
+                  : diagnosticPrompts.toString().replaceAll('\n', ' ').length,
             );
       final diagnosticStatusMessage = apiStatusMessage == null
           ? 'missing'
-          : apiStatusMessage.toString().replaceAll('\\n', ' ');
+          : apiStatusMessage.toString().replaceAll('\n', ' ');
       addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room response_keys '
           'path_depth=2 path_count=${diagnosticPaths.length} paths=[$diagnosticPathsText] '
           'prompts=$diagnosticPromptsText status_msg=$diagnosticStatusMessage');
