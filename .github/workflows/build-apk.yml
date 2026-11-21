@@ -1,6 +1,10 @@
 name: Build Vio RTMP Key APK
 
 on:
+  push:
+    branches:
+      - main
+      - "fix/**"
   workflow_dispatch:
 
 permissions:
