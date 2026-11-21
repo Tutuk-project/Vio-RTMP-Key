@@ -5,10 +5,52 @@ import 'package:shared_preferences/shared_preferences.dart';
 class TikTokService {
   static String? _baseUrl;
   static const String liveStudioUrl = 'https://studio.tiktok.com';
+  static const int _maxDiagnosticEntries = 200;
+  static final List<String> _diagnosticEntries = [];
+  static final Map<String, DateTime> _diagnosticStarts = {};
+  static String? _lastServerSource;
+  static String? _lastVersionSource;
+  static bool? _lastLoginCheckResult;
+
+  static String startDiagnosticOperation(String operation) {
+    final now = DateTime.now();
+    final id = '${now.microsecondsSinceEpoch}';
+    _diagnosticStarts[id] = now;
+    addDiagnosticLog('[$id] START operation=$operation timestamp=${now.toIso8601String()}');
+    return id;
+  }
+
+  static void finishDiagnosticOperation(String id, String outcome) {
+    final started = _diagnosticStarts.remove(id);
+    final durationMs = started == null ? -1 : DateTime.now().difference(started).inMilliseconds;
+    addDiagnosticLog('[$id] END outcome=$outcome duration_ms=$durationMs timestamp=${DateTime.now().toIso8601String()}');
+  }
+
+  static void addDiagnosticLog(String message) {
+    _diagnosticEntries.add('${DateTime.now().toIso8601String()} $message');
+    if (_diagnosticEntries.length > _maxDiagnosticEntries) {
+      _diagnosticEntries.removeRange(0, _diagnosticEntries.length - _maxDiagnosticEntries);
+    }
+  }
+
+  static String getDiagnosticLogText() => _diagnosticEntries.join('\\n');
+
+  static String _cookieHealth(String cookies) {
+    final names = <String>[];
+    for (final part in cookies.split(';')) {
+      final separator = part.indexOf('=');
+      if (separator > 0) names.add(part.substring(0, separator).trim());
+    }
+    final nameSet = names.toSet();
+    return 'cookie_count=${names.length} cookie_names=${names.join(',')} '
+        'sessionid=${nameSet.contains('sessionid')} sid_tt=${nameSet.contains('sid_tt')} '
+        'sid_guard=${nameSet.contains('sid_guard')} checkLoginStatus=${_lastLoginCheckResult?.toString() ?? 'not_checked'}';
+  }
   
   // Get server URL dynamically
   static Future<String> getServerUrl() async {
     if (_baseUrl != null) {
+      _lastServerSource = 'cache';
       return _baseUrl!;
     }
     
@@ -29,19 +71,20 @@ class TikTokService {
                 action2['param']['strategy_info'][serverUrl] != null) {
               serverUrl = action2['param']['strategy_info'][serverUrl];
               _baseUrl = 'https://$serverUrl/';
+              _lastServerSource = 'lookup';
               return _baseUrl!;
             }
           }
           _baseUrl = 'https://$serverUrl/';
+          _lastServerSource = 'lookup';
           return _baseUrl!;
         }
       }
-    } catch (e) {
-      print('Error getting server URL: $e');
+    } catch (_) {
+      addDiagnosticLog('server_lookup=error');
     }
-    
-    // Fallback to default
     _baseUrl = 'https://webcast16-normal-c-useast2a.tiktokv.com/';
+    _lastServerSource = 'fallback';
     return _baseUrl!;
   }
   
@@ -85,9 +128,11 @@ class TikTokService {
       };
       final response = await http.get(Uri.parse(url).replace(queryParameters: params));
       final data = jsonDecode(response.body);
-      return data['data']['manifest']['win32']['version'] ?? '0.99.0';
-    } catch (e) {
-      print('Error getting version: $e');
+      final version = data['data']['manifest']['win32']['version'] ?? '0.99.0';
+      _lastVersionSource = 'network';
+      return version;
+    } catch (_) {
+      _lastVersionSource = 'fallback';
       return '0.99.0';
     }
   }
@@ -145,42 +190,24 @@ class TikTokService {
     String regionPriority = '',
     bool isMatureContent = false,
     String? thumbnailPath,
+    String? diagnosticId,
   }) async {
     try {
       final cookies = await getCookies();
       
-      print('=== TikTokService: Generate Stream Key ===');
-      print('Title: $title');
-      print('Hashtag ID: $hashtagId');
-      print('Game Tag ID: $gameTagId');
-      print('Region: $regionPriority');
-      print('Cookies loaded: ${cookies != null && cookies.isNotEmpty}');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] generate_start cookies_loaded=${cookies != null && cookies.isNotEmpty}');
       
       if (cookies == null || cookies.isEmpty) {
         throw Exception('Silakan login terlebih dahulu');
       }
       
-      // Log cookies untuk debugging (jangan log full untuk privacy)
-      print('Cookies length: ${cookies.length}');
-      print('Cookies preview: ${cookies.substring(0, cookies.length > 150 ? 150 : cookies.length)}...');
-      
-      // Check apakah ada cookie penting
-      final hasSessionId = cookies.contains('sessionid') || cookies.contains('sid_tt');
-      final hasSidGuard = cookies.contains('sid_guard');
-      print('Has sessionid/sid_tt: $hasSessionId');
-      print('Has sid_guard: $hasSidGuard');
-      
-      if (!hasSessionId) {
-        print('WARNING: Cookies mungkin tidak lengkap. Pastikan login via WebView atau import dari file.');
-      }
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] cookie_health ${_cookieHealth(cookies)}');
       
       // Get server URL
       final baseUrl = await getServerUrl();
-      print('Base URL: $baseUrl');
-      
-      // Get Live Studio version
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] server_url=$baseUrl source=${_lastServerSource ?? 'unknown'}');
       final version = await getLiveStudioVersion();
-      print('Live Studio version: $version');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] live_studio_version=$version source=${_lastVersionSource ?? 'unknown'}');
       
       // Build headers sesuai source code Python
       final headers = <String, String>{
@@ -216,9 +243,7 @@ class TikTokService {
       // Upload thumbnail jika ada
       String? coverUri = '';
       if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
-        print('Uploading thumbnail: $thumbnailPath');
         coverUri = await uploadThumbnail(thumbnailPath, baseUrl, params);
-        print('Thumbnail URI: $coverUri');
       }
       
       // Build form data sesuai source code Python
@@ -245,12 +270,8 @@ class TikTokService {
         data['age_restricted'] = '4';
       }
       
-      print('Request params: $params');
-      print('Request data: $data');
-      
       // Request untuk create room - menggunakan form data, bukan JSON
       final createRoomUrl = '${baseUrl}webcast/room/create/';
-      print('Creating room at: $createRoomUrl');
       
       final uri = Uri.parse(createRoomUrl).replace(queryParameters: params);
       final createResponse = await http.post(
@@ -260,15 +281,22 @@ class TikTokService {
       );
       
       final createResponseBody = createResponse.body;
-      print('Create room response status: ${createResponse.statusCode}');
-      print('Create room response body: $createResponseBody');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room http_status=${createResponse.statusCode}');
       
       if (createResponse.statusCode != 200) {
-        throw Exception('Gagal membuat room: ${createResponse.statusCode}\nResponse: $createResponseBody');
+        addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room failed http_status=${createResponse.statusCode}');
+        throw Exception('Gagal membuat room: HTTP ${createResponse.statusCode}');
       }
       
       final createData = jsonDecode(createResponseBody);
-      print('Create room data: $createData');
+      final apiStatusCode = createData['status_code'];
+      final apiStatusMessage = createData['status_msg'];
+      final hasPrompts = createData['data'] != null && createData['data']['prompts'] != null;
+      final diagnosticRoomId = createData['data']?['room_id'];
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room api_status_code=${apiStatusCode ?? 'missing'} '
+          'status_msg=${apiStatusMessage ?? 'missing'} prompts_present=$hasPrompts '
+          'room_id_present=${diagnosticRoomId != null && diagnosticRoomId.toString().isNotEmpty} '
+          'room_id=${diagnosticRoomId ?? 'missing'}');
       
       // Check for error in response
       if (createData['data'] != null && createData['data']['prompts'] != null) {
@@ -277,12 +305,11 @@ class TikTokService {
             prompts.toString().toLowerCase().contains('please login')) {
           throw Exception('Please login first. Cookies mungkin tidak valid atau expired. Coba login ulang atau import cookies dari file.');
         }
-        throw Exception('Error: $prompts');
+        throw Exception('TikTok mengembalikan prompts saat membuat room.');
       }
       
       if (createData['status_code'] != null && createData['status_code'] != 0) {
         final errorMsg = createData['status_msg'] ?? 'Unknown error';
-        final errorData = createData['data'] ?? {};
         
         // Check jika error terkait login
         if (errorMsg.toLowerCase().contains('login') || 
@@ -291,7 +318,7 @@ class TikTokService {
           throw Exception('Please login first. Cookies mungkin tidak valid atau expired. Coba login ulang atau import cookies dari file.');
         }
         
-        throw Exception('Error create room: $errorMsg\nData: $errorData');
+        throw Exception('Error create room: $errorMsg');
       }
       
       // Extract stream info dari response
@@ -299,17 +326,12 @@ class TikTokService {
       final fullRtmpUrl = createData['data']['stream_url']['rtmp_push_url'];
       final shareUrl = createData['data']['share_url'];
       
-      print('Full RTMP URL: $fullRtmpUrl');
-      
       // Extract base URL dan stream key untuk backward compatibility
       // Base URL adalah bagian sebelum stream key (termasuk trailing slash)
       // Stream key adalah bagian setelah slash terakhir
       final splitIndex = fullRtmpUrl.lastIndexOf('/');
       final baseStreamUrl = fullRtmpUrl.substring(0, splitIndex + 1);
       final streamKey = fullRtmpUrl.substring(splitIndex + 1);
-      
-      print('Base URL: $baseStreamUrl');
-      print('Stream Key: $streamKey');
       
       return {
         'success': true,
@@ -320,37 +342,31 @@ class TikTokService {
         'roomId': createData['data']['room_id'] ?? '',
       };
     } catch (e) {
-      // Log error untuk debugging
-      print('TikTokService Error: $e');
-      print('Stack trace: ${StackTrace.current}');
-      
-      String errorMessage = 'Unknown error';
-      if (e is Exception) {
-        errorMessage = e.toString().replaceAll('Exception: ', '');
-      } else if (e is FormatException) {
-        errorMessage = 'Format error: ${e.message}';
-      } else {
-        errorMessage = e.toString();
-      }
-      
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] generate_exception type=${e.runtimeType}');
+      final errorMessage = e is Exception
+          ? e.toString().replaceAll('Exception: ', '')
+          : 'Terjadi kesalahan saat membuat room.';
       return {
         'success': false,
         'error': errorMessage,
-        'fullError': e.toString(),
+        'fullError': errorMessage,
       };
     }
   }
   
   // End stream
-  static Future<bool> endStream(String roomId) async {
+  static Future<bool> endStream(String roomId, {String? diagnosticId}) async {
     try {
       final cookies = await getCookies();
       if (cookies == null || cookies.isEmpty) {
+        addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream cookie_missing=true');
         return false;
       }
-      
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream cookie_health ${_cookieHealth(cookies)}');
       final baseUrl = await getServerUrl();
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream server_url=$baseUrl source=${_lastServerSource ?? 'unknown'}');
       final version = await getLiveStudioVersion();
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream live_studio_version=$version source=${_lastVersionSource ?? 'unknown'}');
       
       final headers = <String, String>{
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TikTokLIVEStudio/$version Chrome/108.0.5359.215 Electron/22.3.18-tt.8.release.main.44 TTElectron/22.3.18-tt.8.release.main.44 Safari/537.36',
@@ -368,20 +384,23 @@ class TikTokService {
       final uri = Uri.parse('${baseUrl}webcast/room/finish_abnormal/').replace(queryParameters: params);
       final response = await http.post(uri, headers: headers);
       
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['data'] != null && data['data']['prompts'] != null) {
-          return false;
-        }
-        return true;
-      }
-      
-      return false;
+      final Map<String, dynamic> data = response.statusCode == 200
+          ? jsonDecode(response.body) as Map<String, dynamic>
+          : <String, dynamic>{};
+      final apiStatusCode = data['status_code'];
+      final apiStatusMessage = data['status_msg'];
+      final hasPrompts = data['data'] != null && data['data']['prompts'] != null;
+      final success = response.statusCode == 200 && apiStatusCode == 0 && !hasPrompts;
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream http_status=${response.statusCode} '
+          'api_status_code=${apiStatusCode ?? 'missing'} status_msg=${apiStatusMessage ?? 'missing'} '
+          'prompts_present=$hasPrompts result=$success');
+      return success;
     } catch (e) {
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] end_stream exception_type=${e.runtimeType}');
       return false;
     }
   }
-  
+
   // Check login status
   static Future<bool> checkLoginStatus() async {
     try {
@@ -401,15 +420,18 @@ class TikTokService {
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['status_code'] == 0;
+        _lastLoginCheckResult = data['status_code'] == 0;
+        return _lastLoginCheckResult!;
       }
+      _lastLoginCheckResult = false;
       
       return false;
     } catch (e) {
+      _lastLoginCheckResult = false;
       return false;
     }
   }
-  
+
   // Import cookies dari file JSON
   static Future<Map<String, dynamic>> importCookiesFromJson(String jsonString) async {
     try {

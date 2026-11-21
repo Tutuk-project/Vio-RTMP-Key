@@ -324,7 +324,9 @@ class _HomeScreenState extends State<HomeScreen> {
       gameTagId = '0';
     }
     
+    final diagnosticId = TikTokService.startDiagnosticOperation('GO_LIVE');
     final result = await TikTokService.generateStreamKey(
+      diagnosticId: diagnosticId,
       title: _titleController.text.trim(),
       hashtagId: hashtagId,
       gameTagId: gameTagId,
@@ -335,6 +337,11 @@ class _HomeScreenState extends State<HomeScreen> {
       thumbnailPath: _thumbnailPath,
     );
 
+    TikTokService.finishDiagnosticOperation(
+      diagnosticId,
+      result['success'] == true ? 'success' : 'failed',
+    );
+    if (!mounted) return;
     setState(() {
       _isGenerating = false;
     });
@@ -440,7 +447,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      final success = await TikTokService.endStream(_streamInfo!.roomId);
+      final diagnosticId = TikTokService.startDiagnosticOperation('END_STREAM');
+      final success = await TikTokService.endStream(
+        _streamInfo!.roomId,
+        diagnosticId: diagnosticId,
+      );
+      TikTokService.finishDiagnosticOperation(diagnosticId, success ? 'success' : 'failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -890,6 +902,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       foregroundColor: Colors.red,
                     ),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: TikTokService.getDiagnosticLogText()),
+                      );
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Log diagnostik disalin')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Salin log diagnostik'),
                   ),
                 ),
               ],
