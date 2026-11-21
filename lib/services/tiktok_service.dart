@@ -484,7 +484,7 @@ class TikTokService {
       final statusMessage = responseData is Map ? responseData['status_msg'] : null;
       final accepted = response.statusCode == 200 &&
           (apiStatusCode == 0 ||
-              (status == 2 && apiStatusCode == 4003150) ||
+              (status != 4 && apiStatusCode == 4003150) ||
               (status == 4 && (apiStatusCode == 30003 || apiStatusCode == 30003001)));
       addDiagnosticLog('$prefix status=$status http_status=${response.statusCode} '
           'api_status_code=${apiStatusCode ?? 'missing'} '
