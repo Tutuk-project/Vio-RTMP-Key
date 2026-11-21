@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -34,6 +35,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isGenerating = false;
   StreamInfo? _streamInfo;
   bool _cookiesLoaded = false;
+  Timer? _anchorHeartbeatTimer;
+  int _anchorStatus = 1;
+  bool _anchorPingInFlight = false;
   
   // Controllers untuk output fields (untuk menghindari rebuild)
   final _rtmpUrlController = TextEditingController();
@@ -275,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _anchorHeartbeatTimer?.cancel();
     _titleController.dispose();
     _rtmpUrlController.dispose();
     _shareUrlController.dispose();
@@ -353,6 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _rtmpUrlController.text = _streamInfo!.fullRtmpUrl;
         _shareUrlController.text = _streamInfo!.shareUrl;
       });
+      _startAnchorHeartbeat();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Stream key berhasil di-generate!'),
@@ -416,6 +422,49 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _startAnchorHeartbeat() {
+    _anchorHeartbeatTimer?.cancel();
+    _anchorStatus = 1;
+    _pingAnchorOnce();
+    _anchorHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        _pingAnchorOnce();
+      },
+    );
+  }
+
+  Future<void> _pingAnchorOnce() async {
+    final info = _streamInfo;
+    if (info == null || _anchorPingInFlight) return;
+
+    _anchorPingInFlight = true;
+    try {
+      await TikTokService.pingAnchor(
+        roomId: info.roomId,
+        streamId: info.streamId,
+        status: _anchorStatus,
+      );
+    } finally {
+      _anchorPingInFlight = false;
+    }
+  }
+
+  Future<void> _markStreamStarted() async {
+    if (_streamInfo == null) return;
+    setState(() {
+      _anchorStatus = 2;
+    });
+    await _pingAnchorOnce();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Status anchor dikirim sebagai streaming. Periksa TikTok untuk memastikan LIVE benar-benar aktif.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _copyToClipboard(String text, String label) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
@@ -450,6 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final diagnosticId = TikTokService.startDiagnosticOperation('END_STREAM');
       final success = await TikTokService.endStream(
         _streamInfo!.roomId,
+        streamId: _streamInfo!.streamId,
         diagnosticId: diagnosticId,
       );
       TikTokService.finishDiagnosticOperation(diagnosticId, success ? 'success' : 'failed');
@@ -463,8 +513,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
         if (success) {
+          _anchorHeartbeatTimer?.cancel();
+          _anchorHeartbeatTimer = null;
           setState(() {
             _streamInfo = null;
+            _anchorStatus = 1;
           });
         }
       }
@@ -890,6 +943,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _streamInfo != null && _anchorStatus != 2 ? _markStreamStarted : null,
+                    icon: const Icon(Icons.wifi_tethering),
+                    label: Text(_anchorStatus == 2 ? 'Anchor status: streaming' : 'Saya sudah mulai streaming'),
                   ),
                 ),
                 SizedBox(
