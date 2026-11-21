@@ -33,7 +33,7 @@ class TikTokService {
     }
   }
 
-  static String getDiagnosticLogText() => _diagnosticEntries.join('\\n');
+  static String getDiagnosticLogText() => _diagnosticEntries.join('\n');
 
   static String _cookieHealth(String cookies) {
     final names = <String>[];
@@ -128,9 +128,9 @@ class TikTokService {
       };
       final response = await http.get(Uri.parse(url).replace(queryParameters: params));
       final data = jsonDecode(response.body);
-      final version = data['data']['manifest']['win32']['version'] ?? '0.99.0';
-      _lastVersionSource = 'network';
-      return version;
+      final resolvedVersion = data['data']['manifest']['win32']['version'];
+      _lastVersionSource = resolvedVersion == null ? 'fallback' : 'network';
+      return resolvedVersion ?? '0.99.0';
     } catch (_) {
       _lastVersionSource = 'fallback';
       return '0.99.0';
