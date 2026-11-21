@@ -298,14 +298,23 @@ class TikTokService {
         if (value == null) return 'null';
         if (value is String) return 'string';
         if (value is bool) return 'bool';
-        if (value is int || value is num) return 'int';
+        if (value is num) return 'number';
         if (value is Map) return 'object';
         if (value is List) return 'array';
         return value.runtimeType.toString();
       }
 
+      bool diagnosticPathExists(dynamic value, List<String> segments) {
+        dynamic current = value;
+        for (final segment in segments) {
+          if (current is! Map || !current.containsKey(segment)) return false;
+          current = current[segment];
+        }
+        return true;
+      }
+
       void collectDiagnosticPaths(dynamic value, String path, int depth, List<String> output) {
-        if (depth >= 3) return;
+        if (depth >= 2) return;
         if (value is Map) {
           for (final entry in value.entries) {
             final key = entry.key.toString();
@@ -320,20 +329,6 @@ class TikTokService {
             collectDiagnosticPaths(value[i], childPath, depth + 1, output);
           }
         }
-      }
-
-      bool diagnosticFieldExists(dynamic value, String field) {
-        if (value is Map) {
-          if (value.containsKey(field)) return true;
-          for (final child in value.values) {
-            if (diagnosticFieldExists(child, field)) return true;
-          }
-        } else if (value is List) {
-          for (final child in value) {
-            if (diagnosticFieldExists(child, field)) return true;
-          }
-        }
-        return false;
       }
 
       dynamic findDiagnosticField(dynamic value, String field) {
@@ -352,34 +347,65 @@ class TikTokService {
         return null;
       }
 
+      const diagnosticFieldPaths = <String, List<String>>{
+        'data.id': ['id'],
+        'data.id_str': ['id_str'],
+        'data.room_id': ['room_id'],
+        'data.room_id_str': ['room_id_str'],
+        'data.living_room_attrs': ['living_room_attrs'],
+        'data.living_room_attrs.room_id': ['living_room_attrs', 'room_id'],
+        'data.living_room_attrs.room_id_str': ['living_room_attrs', 'room_id_str'],
+        'data.stream_id': ['stream_id'],
+        'data.stream_id_str': ['stream_id_str'],
+        'data.stream_url': ['stream_url'],
+        'data.stream_url.rtmp_push_url': ['stream_url', 'rtmp_push_url'],
+        'data.multi_stream_url': ['multi_stream_url'],
+        'data.multi_stream_url.rtmp_push_url': ['multi_stream_url', 'rtmp_push_url'],
+        'data.share_url': ['share_url'],
+        'data.status': ['status'],
+        'data.finish_reason': ['finish_reason'],
+        'data.live_room_mode': ['live_room_mode'],
+        'data.prompts': ['prompts'],
+      };
+      final diagnosticPresence = diagnosticFieldPaths.entries
+          .map((entry) => '${entry.key}=${diagnosticPathExists(responseData, entry.value)}')
+          .join(' ');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room field_presence=[$diagnosticPresence]');
+
+      String diagnosticScalarValue(String field) {
+        if (responseData is! Map || !responseData.containsKey(field)) {
+          return '$field=missing';
+        }
+        final value = responseData[field];
+        if (value == null) return '$field=null';
+        if (value is num || value is bool) return '$field=$value';
+        return '$field=non_numeric(${diagnosticValueType(value)})';
+      }
+
+      final diagnosticScalars = ['status', 'finish_reason', 'live_room_mode']
+          .map(diagnosticScalarValue)
+          .join(' ');
+      addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room scalar_values=[$diagnosticScalars]');
+
       final diagnosticPaths = <String>[];
       collectDiagnosticPaths(responseData, 'data', 0, diagnosticPaths);
-      const diagnosticFields = [
-        'room_id',
-        'room_id_str',
-        'stream_id',
-        'stream_id_str',
-        'living_room_attrs',
-        'rtmp_push_url',
-        'share_url',
-      ];
-      final diagnosticPresence = diagnosticFields
-          .map((field) => '$field=${diagnosticFieldExists(responseData, field)}')
-          .join(' ');
+      final diagnosticPathsText = diagnosticPaths.length > 180
+          ? '${diagnosticPaths.take(180).join(', ')}, ...(${diagnosticPaths.length - 180} omitted)'
+          : diagnosticPaths.join(', ');
       final diagnosticPrompts = findDiagnosticField(responseData, 'prompts');
       final diagnosticPromptsText = diagnosticPrompts == null
           ? 'missing'
-          : diagnosticPrompts.toString().replaceAll('\n', ' ').substring(
+          : diagnosticPrompts.toString().replaceAll('\\n', ' ').substring(
               0,
-              diagnosticPrompts.toString().replaceAll('\n', ' ').length > 200
+              diagnosticPrompts.toString().replaceAll('\\n', ' ').length > 200
                   ? 200
-                  : diagnosticPrompts.toString().replaceAll('\n', ' ').length,
+                  : diagnosticPrompts.toString().replaceAll('\\n', ' ').length,
             );
       final diagnosticStatusMessage = apiStatusMessage == null
           ? 'missing'
-          : apiStatusMessage.toString().replaceAll('\n', ' ');
+          : apiStatusMessage.toString().replaceAll('\\n', ' ');
       addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room response_keys '
-          'paths=[${diagnosticPaths.join(', ')}] field_presence=[$diagnosticPresence] '
+          'path_depth=2 path_count=${diagnosticPaths.length} paths=[$diagnosticPathsText] '
           'prompts=$diagnosticPromptsText status_msg=$diagnosticStatusMessage');
       final hasPrompts = diagnosticPrompts != null;
       
