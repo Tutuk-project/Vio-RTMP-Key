@@ -289,6 +289,7 @@ class TikTokService {
       }
       
       final createData = jsonDecode(createResponseBody);
+      final errorData = createData['data'] ?? {};
       final apiStatusCode = createData['status_code'];
       final apiStatusMessage = createData['status_msg'];
       final hasPrompts = createData['data'] != null && createData['data']['prompts'] != null;
