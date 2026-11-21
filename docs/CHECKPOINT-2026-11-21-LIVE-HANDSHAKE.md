@@ -2,7 +2,7 @@
 **Date:** 2026-11-21 (Asia/Jakarta)  
 **Repository:** [Tutuk-project/Vio-RTMP-Key](https://github.com/Tutuk-project/Vio-RTMP-Key)  
 **Branch:** `main`  
-**Latest code commit:** `935fd640b69195823df7deb52976e9ab5ab1f019`
+**Latest code commit:** `fe5059bb83c71acaf7dd8d791fcdb4ec4f25d714`
 
 ## 1. Test evidence received
 
@@ -55,6 +55,7 @@ The current Vio app still does **not** implement TikTok MetaSec request-signatur
 | `1762bc554f92ab813a924a1a30c9ed4fbb76f1d5` | Add `crypto` dependency for request body checksum |
 | `2ab11f6da3a5771462fc51fff0bf5b8037a4edd2` | Preserve stream ID in `StreamInfo` |
 | `935fd640b69195823df7deb52976e9ab5ab1f019` | Add five-second anchor heartbeat and UI control to send status 2 after the external encoder starts |
+| `fe5059bb83c71acaf7dd8d791fcdb4ec4f25d714` | Accept the documented LIVE-state response code for non-final anchor pings |
 
 ### Parameter request berubah?
 **Ya.**
