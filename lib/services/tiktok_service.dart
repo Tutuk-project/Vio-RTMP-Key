@@ -377,12 +377,7 @@ class TikTokService {
             );
       final diagnosticStatusMessage = apiStatusMessage == null
           ? 'missing'
-          : apiStatusMessage.toString().replaceAll('\n', ' ').substring(
-              0,
-              apiStatusMessage.toString().replaceAll('\n', ' ').length > 200
-                  ? 200
-                  : apiStatusMessage.toString().replaceAll('\n', ' ').length,
-            );
+          : apiStatusMessage.toString().replaceAll('\n', ' ');
       addDiagnosticLog('[${diagnosticId ?? 'untracked'}] create_room response_keys '
           'paths=[${diagnosticPaths.join(', ')}] field_presence=[$diagnosticPresence] '
           'prompts=$diagnosticPromptsText status_msg=$diagnosticStatusMessage');
